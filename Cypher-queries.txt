@@ -1,0 +1,102 @@
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_join_team_chat.csv' AS line
+MERGE (u:User {id: toInteger(line.user_id)}) 
+MERGE (c:TeamChatSession {id: toInteger(line.teamchat_session_id)}) 
+MERGE (u)-[:Joined{timestamp: line.date}]->(c)
+
+1) Users with ID>100 and who have joined after "2016-06-01"
+MATCH (u:User)-[j:Joined]->(s:TeamChatSession)
+WHERE u.id >100 and j.timestamp > "2016-06-01"
+return *
+
+2) Top 10 chattiest users ( average number of sessions per user)
+match (a)-[:Joined]->(b)
+	return a.id, count(b)
+	order by count(b) desc limit 10
+
+3) Top 10 active teamchatsessios.
+MATCH (c:TeamChatSession)<-[r:Joined]-(u:User)
+RETURN c.id, count(r) AS num_joins
+ORDER BY num_joins DESC
+LIMIT 10
+
+---------------------------New session-------------------------
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_respond_team_chat.csv' AS line
+MERGE (n:ChatId {id: toInteger(line.chatid1)}) 
+MERGE (m:ChatId {id: toInteger(line.chatid2)}) 
+MERGE (n)-[:respondedto{timestamp: line.date}]->(m)
+
+1) Find the longest conversation chain in the chat data using the "respondedto" label.
+match p = (i1)-[:respondedto*]->(i2) return length(p),p order by length(p) desc limit 1
+
+//count
+MATCH (n:ChatId)-[jn:respondedto]->(m:ChatId)
+WITH m.id as chatID ,jn, n
+RETURN chatID, COUNT(jn) AS chatID_count
+ORDER BY chatID_count DESC
+-----------------------New session------------------------
+#Users leaving chatsession
+LOAD CSV FROM "https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_leave_team_chat.csv" AS line
+MERGE (u:User {id: line[0]})
+MERGE (c:TeamChatSession {id: line[1]})
+MERGE (u)-[:Leaves{timeStamp: line[2]}]->(c)
+
+---------------------New session----------------------
+LOAD CSV FROM "https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_mention_team_chat.csv" AS line
+MERGE (a:ChatItem {id: line[0]})
+MERGE (b:User {id: line[1]})
+MERGE (a)-[:Mentioned{timeStamp: line[2]}]->(b)
+
+1) User id "1" is mentioned in which all chat items ?
+MATCH (a:ChatItem)-[jn:Mentioned]->(b:User)
+where b.id='1'
+RETURN *
+-------------------------New session---------------
+#User joining and leaving the sessions.
+LOAD CSV FROM "https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_join_team_chat.csv" AS line
+MERGE (u:User {id: toInteger(line[0])})
+MERGE (c:TeamChatSession {id: toInteger(line[1])})
+MERGE (u)-[:Joins{timeStamp: line[2]}]->(c)
+
+
+LOAD CSV FROM "https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_leave_team_chat.csv" AS line
+MERGE (u:User {id: line[0]})
+MERGE (c:TeamChatSession {id: line[1]})
+MERGE (u)-[:Leaves{timeStamp: line[2]}]->(c)
+-----------------------New session------------------------
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/roopaboregowda/Dataset/main/combined-data.csv' AS comb 
+WITH comb WHERE comb.avg_price IS NOT NULL 
+MERGE (a:User {id: toInteger(comb.userId)})
+ON CREATE SET a.avg_price = toFloat(comb.avg_price), a.platformType = comb.platformType, a.count_hits = toInteger(comb.count_hits), a.count_buyId = toInteger(comb.count_buyId)
+MERGE (b:userSessionId {id: comb.userSessionId}) 
+MERGE (a)-[:teamLevel{teamLevel:comb.teamLevel}]->(b)
+RETURN *
+
+
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/roopaboregowda/Dataset/main/chat_join_team_chat.csv' AS line
+MERGE (u:User {id: toInteger(line.user_id)}) 
+MERGE (c:TeamChatSession {id: toInteger(line.teamchat_session_id)}) 
+MERGE (u)-[:Joined{timestamp: line.date}]->(c)
+
+1) Users with hit count>50 who have used "android" platformtype  irrespective of relationship.
+MATCH (a: User)
+WHERE a.count_hits>50  and a.platformType='android' 
+return a
+
+2) Users with average price< 5 who has joined with "teamLevel" relationship.
+MATCH (u:User)-[t:teamLevel]->(s:userSessionId)WHERE u.avg_price <5 RETURN u,t,s
+
+3) Shortest path between nodes 371 and 62 using dijkstra algorithm.
+MATCH (start:User {id: 371}), (end:User {id: 62})
+CALL apoc.algo.dijkstra(start, end, 'Joined',"1") YIELD path, weight
+UNWIND nodes(path) AS node
+UNWIND relationships(path) AS rel
+RETURN node, rel
+
+4) Top 5 users with higest clustering coefficient using "Joined" relationship.
+MATCH (n:User)-[:Joined]->(m:TeamChatSession)<-[:Joined]-(o:User)
+WHERE id(n) < id(o)
+WITH n, COUNT(DISTINCT m) AS degree, COUNT(DISTINCT o) AS triangleCount
+WHERE degree > 1
+RETURN n.id, triangleCount / (degree * (degree - 1) / 2.0) AS clusteringCoefficient
+ORDER BY clusteringCoefficient DESC
+LIMIT 5
